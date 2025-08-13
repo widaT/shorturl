@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"shorturl/pkg/link"
-	"shorturl/pkg/shint"
+	"shorturl/link"
+	"shorturl/shint"
 
 	"github.com/redis/go-redis/v9"
 )

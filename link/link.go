@@ -3,8 +3,11 @@ package link
 import (
 	"context"
 	"errors"
-	"shorturl/pkg/radix"
-	"shorturl/pkg/shint"
+	"shorturl/config"
+	"shorturl/radix"
+	"shorturl/shint"
+
+	"github.com/redis/go-redis/v9"
 )
 
 var (
@@ -21,14 +24,16 @@ var (
 )
 
 type Link struct {
-	idg *shint.Shint
-	rdx *radix.Radix
+	idg        *shint.Shint
+	rdx        *radix.Radix
+	redisCient *redis.Client
 }
 
-func New(idg *shint.Shint) *Link {
+func New(idg *shint.Shint, redisClient *redis.Client) *Link {
 	return &Link{
-		idg: idg,
-		rdx: radix.New(radix.Charset(charset)),
+		idg:        idg,
+		rdx:        radix.New(radix.Charset(charset)),
+		redisCient: redisClient,
 	}
 }
 
@@ -49,19 +54,30 @@ func (l *Link) AddLink(ctx context.Context, meta string, scene string) (string, 
 	if scene == "" {
 		scene = "default"
 	}
-
-	//TODO: check scene
-
+	conf, ok := config.Get().Scenes[scene]
+	if !ok {
+		return "", "", errors.New("link: scene not found")
+	}
 	id, err := l.NewID(ctx)
 	if err != nil {
 		return "", "", err
 	}
-
-	//set key to redis
-	// key := keyPrefix + id
-
-	// rdb.SetNX(ctx, key, meta, ttl)
-
+	key := keyPrefix + id
+	err = l.redisCient.SetNX(ctx, key, meta, conf.TTL).Err()
+	if err != nil {
+		return "", "", err
+	}
 	return id, scene, nil
+}
 
+func (l *Link) GetLink(ctx context.Context, scene string, id string) (string, error) {
+	if scene == "" {
+		scene = "default"
+	}
+	conf, ok := config.Get().Scenes[scene]
+	if !ok {
+		return "", errors.New("link: scene not found")
+	}
+	key := keyPrefix + id
+	l.redisCient.Get(ctx, key).Result()
 }
